@@ -15,10 +15,14 @@ struct ChatDetailView: View {
     let chat: Chat
     @State private var messageText: String = ""
     @State private var llmService: LLMService
+    @StateObject private var speechRecognizer = SpeechRecognitionService()
+    @State private var isRecording = false
+    @State private var hasRecordingPermission = false
+    @State private var recognizedText: String = ""
+    @GestureState private var isLongPressing = false
 
     init(chat: Chat) {
         self.chat = chat
-        // Инициализируем LLMService с дефолтным URL
         _llmService = State(initialValue: LLMService())
     }
 
@@ -59,15 +63,29 @@ struct ChatDetailView: View {
                     .padding(.leading)
                 
                 Button(action: sendMessage) {
-                    Image(systemName: "paperplane.fill")
-                        .foregroundColor(.blue)
+                    Image(systemName: isRecording ? "stop.circle.fill" : "paperplane.fill")
+                        .foregroundColor(isRecording ? .red : .blue)
                         .padding(8)
                         .background(
                             Circle()
                                 .fill(Color.blue.opacity(0.1))
                         )
                 }
-                .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isRecording)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.5)
+                        .updating($isLongPressing) { currentState, gestureState, _ in
+                            gestureState = currentState
+                        }
+                        .onEnded { _ in
+                            startRecording()
+                        }
+                )
+                .onChange(of: isLongPressing) { _, newValue in
+                    if !newValue && isRecording {
+                        stopRecordingAndSend()
+                    }
+                }
                 .padding(.trailing)
             }
             .padding(.vertical, 8)
@@ -75,13 +93,20 @@ struct ChatDetailView: View {
         }
         .navigationTitle(chat.name)
         .onAppear {
-            // Обновляем URL при появлении view
             if let currentSettings = settings.first {
                 llmService.updateServerUrl(currentSettings.serverUrl)
             }
+            
+            speechRecognizer.requestAuthorization { authorized in
+                hasRecordingPermission = authorized
+            }
+            
+            speechRecognizer.onRecognizedText = { text in
+                messageText = text
+                recognizedText = text
+            }
         }
         .onChange(of: settings) { _, newSettings in
-            // Обновляем URL при изменении настроек
             if let currentSettings = newSettings.first {
                 llmService.updateServerUrl(currentSettings.serverUrl)
             }
@@ -91,11 +116,16 @@ struct ChatDetailView: View {
     private func sendMessage() {
         guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
+        if isRecording {
+            speechRecognizer.stopRecording()
+            isRecording = false
+        }
+        
         withAnimation {
             let userMessage = Message(role: "user", content: messageText)
             chat.messages.append(userMessage)
             modelContext.insert(userMessage)
-
+            
             let assistantMessage = Message(role: "assistant", content: "", isPrinting: true)
             chat.messages.append(assistantMessage)
             modelContext.insert(assistantMessage)
@@ -116,12 +146,35 @@ struct ChatDetailView: View {
                 }
             }
             messageText = ""
+            recognizedText = ""
         }
     }
 
     private func copyMessage(_ message: Message) -> () -> Void {
         return {
             UIPasteboard.general.string = message.content
+        }
+    }
+
+    private func startRecording() {
+        guard !isRecording else { return }
+        do {
+            recognizedText = ""
+            messageText = ""
+            try speechRecognizer.startRecording()
+            isRecording = true
+        } catch {
+            print("Ошибка начала записи: \(error)")
+        }
+    }
+
+    private func stopRecordingAndSend() {
+        speechRecognizer.stopRecording()
+        isRecording = false
+        messageText = recognizedText
+        
+        if !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sendMessage()
         }
     }
 }
