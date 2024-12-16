@@ -5,7 +5,6 @@
 //  Created by Антон Николаев on 16/12/2024.
 //
 
-// JarvisApp.swift (updated)
 import SwiftUI
 import SwiftData
 
@@ -21,7 +20,7 @@ struct JarvisApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("Не удалось создать ModelContainer: \(error)")
         }
     }()
 
@@ -32,4 +31,3 @@ struct JarvisApp: App {
         .modelContainer(sharedModelContainer)
     }
 }
-

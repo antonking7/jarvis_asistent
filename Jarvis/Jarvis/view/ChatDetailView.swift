@@ -5,8 +5,6 @@
 //  Created by Антон Николаев on 16/12/2024.
 //
 
-
-// ChatDetailView.swift
 import SwiftUI
 import SwiftData
 
@@ -21,13 +19,13 @@ struct ChatDetailView: View {
                 Text(message.content)
                     .contextMenu {
                         Button(action: copyMessage(message)) {
-                            Label("Copy", systemImage: "doc.on.doc")
+                            Label("Копировать", systemImage: "doc.on.doc")
                         }
-                        // Add other options as needed (delete, etc.)
+                        // Добавьте другие опции по мере необходимости (удаление и т.д.)
                     }
             }
             HStack {
-                TextField("Type a message...", text: $messageText)
+                TextField("Введите сообщение...", text: $messageText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding(.leading)
                 

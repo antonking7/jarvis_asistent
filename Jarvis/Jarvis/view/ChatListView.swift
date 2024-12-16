@@ -12,42 +12,42 @@ struct ChatListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\Chat.timestamp, order: .reverse)]) private var chats: [Chat]
     @State private var editing = false
-    @State private var editedChatIndex: Int? // Индекс редактируемого чата
+    @State private var editedChatID: UUID? // Идентификатор редактируемого чата
     @State private var newName: String = ""
 
     var body: some View {
         NavigationSplitView {
             List {
-                ForEach(chats.indices, id: \.self) { index in
-                    if let editedIndex = editedChatIndex, editedIndex == index {
+                ForEach(chats) { chat in
+                    if let editedID = editedChatID, editedID == chat.id {
                         HStack {
-                            TextField("Rename Chat", text: $newName)
+                            TextField("Переименовать чат", text: $newName)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .onSubmit {
-                                    renameChat(index: index, newName: newName)
+                                    renameChat(chat: chat, newName: newName)
                                 }
                             Button(action: {
-                                renameChat(index: index, newName: newName)
+                                renameChat(chat: chat, newName: newName)
                             }) {
                                 Image(systemName: "checkmark")
                             }
                         }
                     } else {
                         NavigationLink {
-                            ChatDetailView(chat: chats[index])
+                            ChatDetailView(chat: chat)
                         } label: {
-                            Text(chats[index].name)
+                            Text(chat.name)
                         }
                         .contextMenu {
                             Button(action: {
-                                startEditing(index: index)
+                                startEditing(chat: chat)
                             }) {
-                                Label("Rename Chat", systemImage: "pencil")
+                                Label("Переименовать чат", systemImage: "pencil")
                             }
                             Button(role: .destructive, action: {
-                                deleteChats(offsets: IndexSet(integer: index))
+                                deleteChat(chat: chat)
                             }) {
-                                Label("Delete Chat", systemImage: "trash")
+                                Label("Удалить чат", systemImage: "trash")
                             }
                         }
                     }
@@ -61,51 +61,80 @@ struct ChatListView: View {
                         .onChange(of: editing) { newValue, _ in
                             self.editing = newValue
                             if !newValue {
-                                editedChatIndex = nil // Сброс редактируемого индекса при выходе из режима редактирования
+                                editedChatID = nil // Сброс редактируемого чата при выходе из режима редактирования
                             }
                         }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: addChat) {
-                        Label("Add Chat", systemImage: "plus")
+                        Label("Добавить чат", systemImage: "plus")
                     }
                 }
             }
         } detail: {
-            Text("Select a chat")
+            Text("Выберите чат")
         }
     }
 
-    private func startEditing(index: Int) {
-        editedChatIndex = index
-        newName = chats[index].name
+    private func startEditing(chat: Chat) {
+        editedChatID = chat.id
+        newName = chat.name
     }
 
-    private func renameChat(index: Int, newName: String) {
+    private func renameChat(chat: Chat, newName: String) {
         guard !newName.isEmpty else { return } // Проверка на пустое имя
         let trimmedNewName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        if !chats.contains(where: { $0.name == trimmedNewName && $0.id != chats[index].id }) {
-            chats[index].name = trimmedNewName
-            modelContext.insert(chats[index]) // Обновление модели
+        if !chats.contains(where: { $0.name == trimmedNewName && $0.id != chat.id }) {
+            chat.name = trimmedNewName
+            modelContext.insert(chat) // Обновление модели
+            do {
+                try modelContext.save() // Явное сохранение изменений
+            } catch {
+                print("Не удалось сохранить изменения: \(error)")
+            }
         } else {
-            print("Chat with this name already exists")
+            print("Чат с таким именем уже существует")
         }
         
-        editedChatIndex = nil
+        editedChatID = nil
     }
 
     private func addChat() {
         withAnimation {
-            let newChat = Chat(name: "New Chat")
+            let newChat = Chat(name: "Новый чат")
             modelContext.insert(newChat)
+            do {
+                try modelContext.save() // Явное сохранение изменений
+            } catch {
+                print("Не удалось сохранить изменения: \(error)")
+            }
+        }
+    }
+
+    private func deleteChat(chat: Chat) {
+        withAnimation {
+            modelContext.delete(chat)
+            do {
+                try modelContext.save() // Явное сохранение изменений
+            } catch {
+                print("Не удалось сохранить изменения: \(error)")
+            }
         }
     }
 
     private func deleteChats(offsets: IndexSet) {
         withAnimation {
             for index in offsets {
-                modelContext.delete(chats[index])
+                if index < chats.count { // Проверка, чтобы индекс был в допустимом диапазоне
+                    let chatToDelete = chats[index]
+                    modelContext.delete(chatToDelete)
+                    do {
+                        try modelContext.save() // Явное сохранение изменений
+                    } catch {
+                        print("Не удалось сохранить изменения: \(error)")
+                    }
+                }
             }
         }
     }
