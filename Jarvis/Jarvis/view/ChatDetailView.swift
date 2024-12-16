@@ -20,6 +20,8 @@ struct ChatDetailView: View {
     @State private var hasRecordingPermission = false
     @State private var recognizedText: String = ""
     @GestureState private var isLongPressing = false
+    private let speechSynthesizer = SpeechSynthesizer()
+    @State private var shouldSpeak = false
 
     init(chat: Chat) {
         self.chat = chat
@@ -130,13 +132,26 @@ struct ChatDetailView: View {
             chat.messages.append(assistantMessage)
             modelContext.insert(assistantMessage)
             
+            shouldSpeak = false
+            
             llmService.fetchResponse(
                 for: messageText,
-                withContext: Array(chat.messages.dropLast())
+                withContext: Array(chat.messages.dropLast()),
+                onComplete: { completed in
+                    shouldSpeak = completed
+                    
+                    if completed {
+                        if let currentSettings = settings.first,
+                           currentSettings.speakResponses == true {
+                            print("Начинаю озвучивание полного ответа: \(assistantMessage.content)")
+                            self.speechSynthesizer.speak(assistantMessage.content)
+                        }
+                    }
+                }
             ) { response in
                 DispatchQueue.main.async {
                     assistantMessage.content = response
-                    assistantMessage.isPrinting = response.isEmpty
+                    assistantMessage.isPrinting = !shouldSpeak
                     
                     do {
                         try modelContext.save()

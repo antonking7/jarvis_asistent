@@ -8,6 +8,7 @@ final class LLMService: NSObject, URLSessionDataDelegate {
     private var responseBuffer = ""
     private var currentCompletion: ((String) -> Void)?
     private var accumulatedResponse = ""
+    private var onComplete: ((Bool) -> Void)?
     
     init(serverUrl: String = "http://localhost:1234/v1/chat/completions") {
         self.serverUrl = serverUrl
@@ -36,13 +37,17 @@ final class LLMService: NSObject, URLSessionDataDelegate {
         return result
     }
     
-    func fetchResponse(for prompt: String, withContext messages: [Message], completion: @escaping (String) -> Void) {
+    func fetchResponse(
+        for prompt: String, 
+        withContext messages: [Message], 
+        onComplete: @escaping (Bool) -> Void,
+        completion: @escaping (String) -> Void
+    ) {
         guard let endpoint = URL(string: serverUrl) else {
             completion("Ошибка: неверный URL сервера")
             return
         }
         
-        // Сбрасываем состояние
         accumulatedResponse = ""
         currentCompletion = completion
         responseBuffer = ""
@@ -64,6 +69,13 @@ final class LLMService: NSObject, URLSessionDataDelegate {
         
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         let task = session.dataTask(with: request)
+        
+        self.onComplete = { completed in
+            DispatchQueue.main.async {
+                onComplete(completed)
+            }
+        }
+        
         task.resume()
     }
     
@@ -86,6 +98,9 @@ final class LLMService: NSObject, URLSessionDataDelegate {
         
         if line == "data: [DONE]" {
             print("Получен маркер завершения")
+            DispatchQueue.main.async {
+                self.onComplete?(true)
+            }
             return
         }
         

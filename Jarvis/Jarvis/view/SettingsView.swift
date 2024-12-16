@@ -8,6 +8,7 @@ struct SettingsView: View {
     
     @State private var serverHost: String = ""
     @State private var serverPort: String = ""
+    @State private var speakResponses: Bool = false
     
     var body: some View {
         NavigationView {
@@ -19,6 +20,10 @@ struct SettingsView: View {
                     
                     TextField("Порт", text: $serverPort)
                         .keyboardType(.numberPad)
+                }
+                
+                Section(header: Text("Голосовые настройки")) {
+                    Toggle("Озвучивать ответы", isOn: $speakResponses)
                 }
                 
                 Section {
@@ -42,24 +47,39 @@ struct SettingsView: View {
         if let currentSettings = settings.first {
             serverHost = currentSettings.serverHost
             serverPort = currentSettings.serverPort
+            speakResponses = currentSettings.speakResponses ?? false
         } else {
-            // Создаем настройки по умолчанию, если их нет
             let defaultSettings = Settings()
             modelContext.insert(defaultSettings)
             serverHost = defaultSettings.serverHost
             serverPort = defaultSettings.serverPort
+            speakResponses = defaultSettings.speakResponses ?? false
         }
     }
     
     private func saveSettings() {
+        print("Сохраняю настройки, озвучивание: \(speakResponses)")
+        
         if let currentSettings = settings.first {
             currentSettings.serverHost = serverHost
             currentSettings.serverPort = serverPort
+            currentSettings.speakResponses = speakResponses
+            print("Обновлены существующие настройки")
         } else {
-            let newSettings = Settings(serverHost: serverHost, serverPort: serverPort)
+            let newSettings = Settings(
+                serverHost: serverHost,
+                serverPort: serverPort,
+                speakResponses: speakResponses
+            )
             modelContext.insert(newSettings)
+            print("Созданы новые настройки")
         }
         
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            print("Настройки успешно сохранены")
+        } catch {
+            print("Ошибка сохранения настроек: \(error)")
+        }
     }
 } 

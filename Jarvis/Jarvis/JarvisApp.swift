@@ -9,22 +9,13 @@ import SwiftUI
 import SwiftData
 import Foundation
 
-private func deleteOldDatabase() {
-    if let appSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-        let databaseURL = appSupportDirectory.appendingPathComponent("default.store")
-        if FileManager.default.fileExists(atPath: databaseURL.path) {
-            do {
-                try FileManager.default.removeItem(at: databaseURL)
-                print("Старая база данных успешно удалена.")
-            } catch {
-                print("Ошибка удаления базы данных: \(error)")
-            }
-        }
-    }
-}
-
 @main
 struct JarvisApp: App {
+//    init() {
+//        // Удаляем старую базу данных при запуске
+//        deleteOldDatabase()
+//    }
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Chat.self,
@@ -39,6 +30,20 @@ struct JarvisApp: App {
             fatalError("Не удалось создать ModelContainer: \(error)")
         }
     }()
+    
+    private func deleteOldDatabase() {
+        if let appSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let databaseURL = appSupportDirectory.appendingPathComponent("default.store")
+            if FileManager.default.fileExists(atPath: databaseURL.path) {
+                do {
+                    try FileManager.default.removeItem(at: databaseURL)
+                    print("Старая база данных успешно удалена")
+                } catch {
+                    print("Ошибка удаления базы данных: \(error)")
+                }
+            }
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
