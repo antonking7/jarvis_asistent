@@ -29,6 +29,7 @@ struct JarvisApp: App {
         let schema = Schema([
             Chat.self,
             Message.self,
+            Settings.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

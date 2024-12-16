@@ -14,6 +14,7 @@ struct ChatListView: View {
     @State private var editing = false
     @State private var editedChatID: UUID? // Идентификатор редактируемого чата
     @State private var newName: String = ""
+    @State private var showingSettings = false
 
     var body: some View {
         NavigationSplitView {
@@ -66,13 +67,24 @@ struct ChatListView: View {
                         }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: addChat) {
-                        Label("Добавить чат", systemImage: "plus")
+                    HStack {
+                        Button(action: {
+                            showingSettings = true
+                        }) {
+                            Image(systemName: "gear")
+                        }
+                        
+                        Button(action: addChat) {
+                            Label("Добавить чат", systemImage: "plus")
+                        }
                     }
                 }
             }
         } detail: {
             Text("Выберите чат")
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
     }
 

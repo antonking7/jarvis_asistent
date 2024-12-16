@@ -7,12 +7,20 @@
 
 import SwiftUI
 import SwiftData
+import Foundation
 
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query private var settings: [Settings]
     let chat: Chat
     @State private var messageText: String = ""
-    @State private var llmService = LLMService()
+    @State private var llmService: LLMService
+
+    init(chat: Chat) {
+        self.chat = chat
+        // Инициализируем LLMService с дефолтным URL
+        _llmService = State(initialValue: LLMService())
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,35 +74,44 @@ struct ChatDetailView: View {
             .background(Color(UIColor.systemBackground))
         }
         .navigationTitle(chat.name)
+        .onAppear {
+            // Обновляем URL при появлении view
+            if let currentSettings = settings.first {
+                llmService.updateServerUrl(currentSettings.serverUrl)
+            }
+        }
+        .onChange(of: settings) { _, newSettings in
+            // Обновляем URL при изменении настроек
+            if let currentSettings = newSettings.first {
+                llmService.updateServerUrl(currentSettings.serverUrl)
+            }
+        }
     }
 
     private func sendMessage() {
+        guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
         withAnimation {
-            // Создаём сообщение пользователя
             let userMessage = Message(role: "user", content: messageText)
             chat.messages.append(userMessage)
             modelContext.insert(userMessage)
 
-            // Создаём сообщение ассистента
             let assistantMessage = Message(role: "assistant", content: "", isPrinting: true)
             chat.messages.append(assistantMessage)
             modelContext.insert(assistantMessage)
-
-            llmService.fetchResponse(for: messageText) { response in
+            
+            llmService.fetchResponse(
+                for: messageText,
+                withContext: Array(chat.messages.dropLast())
+            ) { response in
                 DispatchQueue.main.async {
-                    assistantMessage.content = ""
-                    for (index, char) in response.enumerated() {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05 * Double(index)) {
-                            assistantMessage.content.append(char)
-                            if index == response.count - 1 {
-                                assistantMessage.isPrinting = false
-                                do {
-                                    try modelContext.save()
-                                } catch {
-                                    print("Не удалось сохранить изменения: \(error)")
-                                }
-                            }
-                        }
+                    assistantMessage.content = response
+                    assistantMessage.isPrinting = response.isEmpty
+                    
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        print("Не удалось сохранить изменения: \(error)")
                     }
                 }
             }
@@ -106,45 +123,5 @@ struct ChatDetailView: View {
         return {
             UIPasteboard.general.string = message.content
         }
-    }
-}
-
-final class LLMService {
-    private let endpoint = URL(string: "http://localhost:1234/v1/chat/completions")!
-
-    func fetchResponse(for prompt: String, completion: @escaping (String) -> Void) {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "model": "qwen2.5-coder-32b-instruct",
-            "messages": [
-                ["role": "user", "content": prompt]
-            ]
-        ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        let task = URLSession.shared.dataTask(with: request) { data, _, error in
-            guard let data = data, error == nil else {
-                print("Ошибка сети: \(error?.localizedDescription ?? "Неизвестная ошибка")")
-                return
-            }
-
-            do {
-                // Декодируем JSON и извлекаем "content"
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let choices = json["choices"] as? [[String: Any]],
-                   let message = choices.first?["message"] as? [String: Any],
-                   let content = message["content"] as? String {
-                    completion(content) // Передаём "content" в замыкание
-                } else {
-                    print("Неправильный формат ответа")
-                }
-            } catch {
-                print("Ошибка декодирования JSON: \(error)")
-            }
-        }
-        task.resume()
     }
 }
