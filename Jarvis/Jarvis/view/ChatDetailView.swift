@@ -15,17 +15,37 @@ struct ChatDetailView: View {
     @State private var llmService = LLMService()
 
     var body: some View {
-        VStack {
-            List(chat.messages.sorted(by: { $0.timestamp < $1.timestamp })) { message in
-                Text(message.content)
-                    .contextMenu {
-                        Button(action: copyMessage(message)) {
-                            Label("Копировать", systemImage: "doc.on.doc")
+        VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(chat.messages.sorted(by: { $0.timestamp < $1.timestamp })) { message in
+                            MessageView(
+                                message: message,
+                                isFromUser: message.role == "user"
+                            )
+                            .id(message.id)
+                            .contextMenu {
+                                Button(action: copyMessage(message)) {
+                                    Label("Копировать", systemImage: "doc.on.doc")
+                                }
+                            }
                         }
-                        // Добавьте другие опции по мере необходимости (удаление и т.д.)
                     }
+                    .padding(.vertical)
+                }
+                .onChange(of: chat.messages.count) { _, _ in
+                    if let lastMessage = chat.messages.last {
+                        withAnimation {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
+                    }
+                }
             }
-            HStack {
+            
+            Divider()
+            
+            HStack(spacing: 12) {
                 TextField("Введите сообщение...", text: $messageText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding(.leading)
@@ -33,8 +53,17 @@ struct ChatDetailView: View {
                 Button(action: sendMessage) {
                     Image(systemName: "paperplane.fill")
                         .foregroundColor(.blue)
+                        .padding(8)
+                        .background(
+                            Circle()
+                                .fill(Color.blue.opacity(0.1))
+                        )
                 }
+                .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(.trailing)
             }
+            .padding(.vertical, 8)
+            .background(Color(UIColor.systemBackground))
         }
         .navigationTitle(chat.name)
     }
