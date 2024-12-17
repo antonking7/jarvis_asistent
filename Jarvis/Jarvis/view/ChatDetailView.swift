@@ -9,6 +9,13 @@ import SwiftUI
 import SwiftData
 import Foundation
 
+struct ViewHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var settings: [Settings]
@@ -22,6 +29,11 @@ struct ChatDetailView: View {
     @GestureState private var isLongPressing = false
     private let speechSynthesizer = SpeechSynthesizer()
     @State private var shouldSpeak = false
+    @FocusState private var isTextFieldFocused: Bool
+    @State private var textHeight: CGFloat = 40
+    
+    private let minHeight: CGFloat = 40
+    private let maxHeight: CGFloat = 120
 
     init(chat: Chat) {
         self.chat = chat
@@ -60,38 +72,58 @@ struct ChatDetailView: View {
             Divider()
             
             HStack(spacing: 12) {
-                TextField("Введите сообщение...", text: $messageText)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(.leading)
-                
-                Button(action: sendMessage) {
-                    Image(systemName: isRecording ? "stop.circle.fill" : "paperplane.fill")
-                        .foregroundColor(isRecording ? .red : .blue)
-                        .padding(8)
+                ZStack(alignment: .leading) {
+                    TextEditor(text: $messageText)
+                        .frame(height: textHeight)
                         .background(
-                            Circle()
-                                .fill(Color.blue.opacity(0.1))
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: ViewHeightKey.self,
+                                    value: geometry.size.height
+                                )
+                            }
                         )
-                }
-                .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isRecording)
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.5)
-                        .updating($isLongPressing) { currentState, gestureState, _ in
-                            gestureState = currentState
-                        }
-                        .onEnded { _ in
-                            startRecording()
-                        }
-                )
-                .onChange(of: isLongPressing) { _, newValue in
-                    if !newValue && isRecording {
-                        stopRecordingAndSend()
+                        .focused($isTextFieldFocused)
+                    
+                    if messageText.isEmpty {
+                        Text("Введите сообщение...")
+                            .foregroundColor(.gray)
+                            .padding(.leading, 5)
                     }
+                }
+                .padding(8)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding(.leading)
+                
+                HStack(spacing: 8) {
+                    Button(action: toggleRecording) {
+                        Image(systemName: isRecording ? "waveform.circle.fill" : "mic.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(isRecording ? .red : .blue)
+                            .symbolEffect(.bounce, value: isRecording)
+                    }
+                    
+                    Button(action: sendWithHaptic) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.blue)
+                    }
+                    .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isRecording)
                 }
                 .padding(.trailing)
             }
             .padding(.vertical, 8)
             .background(Color(UIColor.systemBackground))
+            .onPreferenceChange(ViewHeightKey.self) { height in
+                textHeight = min(max(minHeight, height), maxHeight)
+            }
+            .gesture(
+                TapGesture()
+                    .onEnded { _ in
+                        isTextFieldFocused = false
+                    }
+            )
         }
         .navigationTitle(chat.name)
         .onAppear {
@@ -173,17 +205,24 @@ struct ChatDetailView: View {
 
     private func startRecording() {
         guard !isRecording else { return }
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+        
         do {
             recognizedText = ""
             messageText = ""
             try speechRecognizer.startRecording()
             isRecording = true
+            isTextFieldFocused = false
         } catch {
             print("Ошибка начала записи: \(error)")
         }
     }
 
     private func stopRecordingAndSend() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+        
         speechRecognizer.stopRecording()
         isRecording = false
         messageText = recognizedText
@@ -191,5 +230,22 @@ struct ChatDetailView: View {
         if !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             sendMessage()
         }
+    }
+
+    private func toggleRecording() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        if isRecording {
+            stopRecordingAndSend()
+        } else {
+            startRecording()
+        }
+    }
+    
+    private func sendWithHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        sendMessage()
     }
 }
